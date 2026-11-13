@@ -10,7 +10,6 @@
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
-use std::time::{Duration, Instant};
 
 use eframe::egui;
 use image::{RgbImage, RgbaImage};
@@ -74,7 +73,6 @@ pub enum JobResult {
         id: u64,
         vector: VectorResult,
         preview: Option<egui::ColorImage>,
-        elapsed: Duration,
     },
 }
 
@@ -148,13 +146,12 @@ fn run_detect(job: DetectJob, cache: &mut Option<((u64, u32), RgbImage)>) -> Job
 }
 
 fn run_render(job: RenderJob) -> JobResult {
-    let start = Instant::now();
     let s = &job.settings;
     let layers = colors::build_layers(&job.doc, s.stacked, s.smooth_sigma);
     let refs: Vec<_> = layers.iter().map(|l| (l.color, &l.mask)).collect();
     let vector = vectorize::vectorize_layers(job.doc.width, job.doc.height, &refs, &s.vector);
     let preview = render_svg(&vector.svg);
-    JobResult::Rendered { id: job.id, vector, preview, elapsed: start.elapsed() }
+    JobResult::Rendered { id: job.id, vector, preview }
 }
 
 /// Renderiza o SVG gerado em pixels (com `resvg`) para mostrar na tela.

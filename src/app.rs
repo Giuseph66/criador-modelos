@@ -89,7 +89,6 @@ struct LoadedImage {
 struct Output {
     vector: VectorResult,
     texture: Option<egui::TextureHandle>,
-    elapsed_ms: u128,
 }
 
 pub struct CriadorApp {
@@ -354,12 +353,12 @@ impl CriadorApp {
                     self.canvas.cancel_stroke();
                     self.edited(true);
                 }
-                JobResult::Rendered { id, vector, preview, elapsed } => {
+                JobResult::Rendered { id, vector, preview, .. } => {
                     if self.pending_render == Some(id) {
                         self.pending_render = None;
                     }
                     let texture = preview.map(|img| ctx.load_texture("vetor", img, egui::TextureOptions::LINEAR));
-                    self.output = Some(Output { vector, texture, elapsed_ms: elapsed.as_millis() });
+                    self.output = Some(Output { vector, texture });
                 }
             }
         }
@@ -943,19 +942,14 @@ impl CriadorApp {
             }
             View::Original => mat::board(ui, self.image.as_ref().map(|i| &i.texture)),
             View::Vector => mat::board(ui, self.output.as_ref().and_then(|o| o.texture.as_ref())),
-            View::Compare => {
-                let boards = [
+            View::Compare => mat::compare(
+                ui,
+                &[
                     ("Original", self.image.as_ref().map(|i| &i.texture)),
                     ("Cores editadas", self.canvas.texture.as_ref()),
-                    ("Vetor", self.output.as_ref().and_then(|o| o.texture.as_ref())),
-                ];
-                ui.columns(3, |cols| {
-                    for (col, (title, tex)) in cols.iter_mut().zip(boards) {
-                        col.label(display(title).size(14.0).color(INK));
-                        mat::board(col, tex);
-                    }
-                });
-            }
+                    ("Vetor (SVG)", self.output.as_ref().and_then(|o| o.texture.as_ref())),
+                ],
+            ),
         }
     }
 

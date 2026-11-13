@@ -2,6 +2,11 @@
 name = "criador_modelos"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+description = "Da imagem ao SVG e ao STL: detecta cores, edita à mão e exporta peças em tamanho real para impressão 3D."
+authors = ["Giuseph Giangareli"]
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 earcut = "0.4"

@@ -174,3 +174,45 @@ pub fn board(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>) {
     ui.painter().rect_filled(rect.translate(vec2(0.0, 3.0)), CornerRadius::same(3), MAT_DEEP);
     egui::Image::new((tex.id(), size * scale)).corner_radius(CornerRadius::same(3)).paint_at(ui, rect);
 }
+
+/// Comparação: as imagens lado a lado (ou empilhadas) numa base só,
+/// no arranjo que deixa cada uma maior.
+pub fn compare(ui: &mut egui::Ui, items: &[(&str, Option<&egui::TextureHandle>)]) {
+    let area = ui.available_rect_before_wrap();
+    ui.allocate_rect(area, Sense::hover());
+    paint_mat(ui.painter(), area, None);
+
+    let n = items.len().max(1) as f32;
+    // Proporção de referência: a primeira imagem disponível.
+    let aspect = items.iter().find_map(|(_, t)| t.map(|t| t.size_vec2())).unwrap_or(vec2(4.0, 3.0));
+    const PAD: f32 = 24.0;
+    const TITLE: f32 = 26.0;
+    let inner = area.shrink(PAD);
+    let row_cell = vec2((inner.width() - PAD * (n - 1.0)) / n, inner.height());
+    let col_cell = vec2(inner.width(), (inner.height() - PAD * (n - 1.0)) / n);
+    let fit = |cell: Vec2| ((cell.x / aspect.x).min((cell.y - TITLE) / aspect.y)).max(0.0);
+    let in_row = fit(row_cell) >= fit(col_cell);
+    let cell = if in_row { row_cell } else { col_cell };
+
+    for (i, (title, tex)) in items.iter().enumerate() {
+        let offset = if in_row { vec2(i as f32 * (cell.x + PAD), 0.0) } else { vec2(0.0, i as f32 * (cell.y + PAD)) };
+        let rect = Rect::from_min_size(inner.min + offset, cell);
+        let image_area = Rect::from_min_max(Pos2::new(rect.min.x, rect.min.y + TITLE), rect.max);
+        let Some(tex) = tex else {
+            ui.put(Rect::from_center_size(image_area.center(), Vec2::splat(28.0)), egui::Spinner::new().size(24.0));
+            continue;
+        };
+        let size = tex.size_vec2();
+        let scale = (image_area.width() / size.x).min(image_area.height() / size.y).max(0.01);
+        let img = Rect::from_center_size(image_area.center(), size * scale);
+        ui.painter().text(
+            Pos2::new(img.min.x, img.min.y - 8.0),
+            Align2::LEFT_BOTTOM,
+            *title,
+            FontId::new(14.0, display_family()),
+            MAT_INK,
+        );
+        ui.painter().rect_filled(img.translate(vec2(0.0, 3.0)), CornerRadius::same(3), MAT_DEEP);
+        egui::Image::new((tex.id(), size * scale)).corner_radius(CornerRadius::same(3)).paint_at(ui, img);
+    }
+}
