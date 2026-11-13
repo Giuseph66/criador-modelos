@@ -1,0 +1,23 @@
+[package]
+name = "criador_modelos"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+earcut = "0.4"
+eframe = "0.37"
+egui-pop-phosphor = "0.15"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "gif"] }
+resvg = "0.50"
+rfd = "0.18"
+visioncortex = "0.8"
+
+[profile.dev]
+# Processamento de imagem fica MUITO lento sem otimização; otimiza deps mesmo em dev.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+strip = true

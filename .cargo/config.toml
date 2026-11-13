@@ -1,0 +1,3 @@
+# Limita o cargo a 2 núcleos para o computador continuar usável durante a compilação.
+[build]
+jobs = 2
