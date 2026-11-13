@@ -6,9 +6,10 @@ use eframe::egui::{self, Color32, CursorIcon, PointerButton, Pos2, Rect, Vec2};
 
 use criador_modelos::colors::{Dirty, Document, hex};
 
-use super::theme::{BORDER, INSET, TEXT_WEAK, icons, muted};
-use super::widgets::{checkerboard, group, pill, swatch, tool};
-use super::{CriadorApp, EditTag};
+use super::mat;
+use super::theme::{GRAPHITE, INK, RULE_STRONG, display, icons, muted};
+use super::widgets::{ghost, pill, spool, tool};
+use super::{CriadorApp, EditTag, View};
 
 /// Ferramenta ativa.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -74,10 +75,14 @@ pub struct ViewTransform {
 }
 
 impl ViewTransform {
-    /// Encaixa a imagem inteira na área, centralizada.
+    /// Encaixa a imagem inteira na área, deixando espaço para as réguas
+    /// (em cima e à esquerda) e para as cotas (embaixo e à direita).
     pub fn fit(area: Vec2, image: Vec2) -> Self {
-        let scale = ((area.x / image.x).min(area.y / image.y) * 0.95).max(0.01);
-        Self { scale, offset: (area - image * scale) / 2.0 }
+        let lead = Vec2::new(mat::RULER + 24.0, mat::RULER + 20.0);
+        let trail = Vec2::new(64.0, 44.0);
+        let avail = (area - lead - trail).max(Vec2::splat(20.0));
+        let scale = (avail.x / image.x).min(avail.y / image.y).max(0.01);
+        Self { scale, offset: lead + (avail - image * scale) / 2.0 }
     }
 
     /// Zoom mantendo fixo o ponto `anchor` (relativo ao canto da área).
@@ -87,6 +92,15 @@ impl ViewTransform {
         self.offset = anchor - (anchor - self.offset) * f;
         self.scale = new_scale;
     }
+}
+
+/// Posição da peça na tela (para grade, réguas e cotas).
+#[derive(Clone, Copy)]
+struct PieceOnScreen {
+    rect: Rect,
+    scale: mat::Scale,
+    width_mm: f64,
+    height_mm: f64,
 }
 
 /// Traço do pincel em andamento.
@@ -188,67 +202,74 @@ impl CriadorApp {
         tex.set_partial([d.x0 as usize, d.y0 as usize], region_image(doc, d), texture_options());
     }
 
-    /// Barra de ferramentas acima da área de edição.
-    pub(super) fn editor_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(10.0, 8.0);
-
-            // Ferramentas.
-            group(ui, |ui| {
-                for t in Tool::ALL {
-                    let tip = format!("{} ({:?})\n{}", t.name(), t.key(), t.hint());
-                    if tool(ui, t.icon(), self.canvas.tool == t).on_hover_text(tip).clicked() {
-                        self.canvas.tool = t;
-                    }
+    /// Trilho vertical de ferramentas (à esquerda da bancada).
+    pub(super) fn tool_rail(&mut self, ui: &mut egui::Ui) {
+        ui.vertical_centered(|ui| {
+            ui.spacing_mut().item_spacing.y = 4.0;
+            for t in Tool::ALL {
+                let active = self.view == View::Edit && self.canvas.tool == t;
+                let tip = format!("{} ({:?})\n{}", t.name(), t.key(), t.hint());
+                if tool(ui, t.icon(), active).on_hover_text(tip).clicked() {
+                    self.canvas.tool = t;
+                    self.view = View::Edit;
                 }
-            });
+            }
 
-            // Tamanho do pincel.
+            ui.add_space(6.0);
+            let (line, _) = ui.allocate_exact_size(egui::vec2(26.0, 1.0), egui::Sense::hover());
+            ui.painter().rect_filled(line, 0.0, RULE_STRONG);
+            ui.add_space(6.0);
+
+            // Cor ativa, como carretel.
+            if let Some((i, color, bg)) = self.active_entry()
+                && spool(ui, color, 26.0, false, bg).on_hover_text(format!("Cor ativa: {}", hex(color))).clicked()
+            {
+                self.selected = Some(i);
+            }
+        });
+    }
+
+    /// Barra de opções da ferramenta ativa, acima da bancada.
+    pub(super) fn options_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(display(self.canvas.tool.name()).size(16.0).color(INK));
+            ui.add_space(12.0);
+
             if matches!(self.canvas.tool, Tool::Brush | Tool::Eraser) {
                 ui.label(muted("Tamanho"));
-                ui.spacing_mut().slider_width = 110.0;
-                ui.add(egui::Slider::new(&mut self.canvas.brush_radius, 1.0..=200.0).logarithmic(true).integer())
-                    .on_hover_text("Raio do pincel em pixels. Atalhos: [ diminui, ] aumenta");
+                ui.spacing_mut().slider_width = 130.0;
+                ui.add(
+                    egui::Slider::new(&mut self.canvas.brush_radius, 1.0..=200.0)
+                        .logarithmic(true)
+                        .integer()
+                        .suffix(" px"),
+                )
+                .on_hover_text("Raio do pincel. Atalhos: [ diminui, ] aumenta");
             }
 
-            // Cor ativa.
-            ui.label(muted("Cor"));
-            match self.active_entry() {
-                Some((i, color, bg)) => {
-                    let tip = format!("{}{}", hex(color), if bg { " (fundo)" } else { "" });
-                    if swatch(ui, color, 22.0, false, bg).on_hover_text(tip).clicked() {
-                        self.selected = Some(i);
-                    }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let image = self.doc_size();
+                if ghost(ui, icons::FRAME_CORNERS, "").on_hover_text("Mostrar a peça inteira (tecla 0)").clicked() {
+                    self.canvas.view = None;
                 }
-                None => {
-                    ui.label(muted("escolha na paleta"));
-                }
-            }
-
-            // Zoom.
-            let image = self.doc_size();
-            group(ui, |ui| {
-                if tool(ui, icons::MAGNIFYING_GLASS_MINUS, false).on_hover_text("Afastar (tecla -)").clicked() {
-                    self.canvas.zoom_by(1.0 / 1.25, image);
+                if ghost(ui, icons::MAGNIFYING_GLASS_PLUS, "").on_hover_text("Aproximar (tecla +)").clicked() {
+                    self.canvas.zoom_by(1.25, image);
                 }
                 let percent = self.canvas.view.map_or_else(
                     || ViewTransform::fit(self.canvas.area, image).scale,
                     |v| v.scale,
                 ) * 100.0;
-                ui.label(egui::RichText::new(format!("{percent:>4.0}%")).monospace().color(TEXT_WEAK));
-                if tool(ui, icons::MAGNIFYING_GLASS_PLUS, false).on_hover_text("Aproximar (tecla +)").clicked() {
-                    self.canvas.zoom_by(1.25, image);
+                ui.label(egui::RichText::new(format!("{percent:.0}%")).color(GRAPHITE));
+                if ghost(ui, icons::MAGNIFYING_GLASS_MINUS, "").on_hover_text("Afastar (tecla -)").clicked() {
+                    self.canvas.zoom_by(1.0 / 1.25, image);
                 }
-                if tool(ui, icons::FRAME_CORNERS, false).on_hover_text("Mostrar a imagem inteira (tecla 0)").clicked() {
-                    self.canvas.view = None;
-                }
-            });
 
-            // Ver a imagem original por baixo.
-            ui.label(egui::RichText::new(icons::EYE).size(17.0).color(TEXT_WEAK));
-            ui.spacing_mut().slider_width = 90.0;
-            ui.add(egui::Slider::new(&mut self.canvas.edit_opacity, 0.0..=1.0).show_value(false))
-                .on_hover_text("Ver original: diminua para enxergar a imagem original por baixo e pintar por cima dela");
+                ui.add_space(16.0);
+                ui.spacing_mut().slider_width = 90.0;
+                ui.add(egui::Slider::new(&mut self.canvas.edit_opacity, 0.0..=1.0).show_value(false))
+                    .on_hover_text("Diminua para enxergar a imagem original por baixo e pintar por cima dela");
+                ui.label(muted(format!("{}  Ver original", icons::EYE)));
+            });
         });
     }
 
@@ -290,11 +311,12 @@ impl CriadorApp {
             self.canvas.view = Some(view);
         }
 
-        // Desenho: quadriculado (= fundo) + original (opcional) + cores editadas.
+        // Desenho: base de corte (grade em mm reais), imagem, cotas e réguas.
+        // As cores de fundo são transparentes: a base aparece através delas.
         let img_rect = Rect::from_min_size(rect.min + view.offset, image * view.scale);
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 12.0, INSET);
-        checkerboard(&painter, img_rect.intersect(rect));
+        let piece = self.piece_on_screen(img_rect, view.scale);
+        mat::paint_mat(&painter, rect, piece.map(|p| p.scale));
         let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         if self.canvas.edit_opacity < 1.0
             && let Some(img) = &self.image
@@ -304,14 +326,11 @@ impl CriadorApp {
         if let Some(tex) = &self.canvas.texture {
             painter.image(tex.id(), img_rect, uv, Color32::WHITE.gamma_multiply(self.canvas.edit_opacity));
         }
-        painter.rect_stroke(
-            img_rect,
-            0.0,
-            egui::Stroke::new(1.0, Color32::from_black_alpha(140)),
-            egui::StrokeKind::Outside,
-        );
-        painter.rect_stroke(rect, 12.0, egui::Stroke::new(1.0, BORDER), egui::StrokeKind::Inside);
-        pill(&painter, egui::pos2(rect.center().x, rect.max.y - 12.0), self.canvas.tool.hint());
+        if let Some(p) = piece {
+            mat::paint_dimensions(&painter, p.rect, p.width_mm, p.height_mm);
+            mat::paint_rulers(&painter, rect, p.scale);
+        }
+        pill(&painter, egui::pos2(rect.center().x + mat::RULER / 2.0, rect.max.y - 12.0), self.canvas.tool.hint());
 
         // Ferramentas.
         let to_image = |p: Pos2| [(p.x - img_rect.min.x) / view.scale, (p.y - img_rect.min.y) / view.scale];
@@ -349,6 +368,26 @@ impl CriadorApp {
                 }
             }
         }
+    }
+
+    /// Onde a peça (área recortada do SVG) aparece na tela e quantos
+    /// pixels de tela valem 1 mm. `None` enquanto o SVG não está pronto.
+    fn piece_on_screen(&self, img_rect: Rect, view_scale: f32) -> Option<PieceOnScreen> {
+        let v = &self.output.as_ref()?.vector;
+        let doc = self.doc.as_ref()?;
+        // Resultado de uma detecção anterior (outro tamanho): ignora.
+        if v.px_width == 0 || v.crop_x + v.px_width > doc.width || v.crop_y + v.px_height > doc.height {
+            return None;
+        }
+        let mm_per_px = (v.width_mm / v.px_width as f64) as f32;
+        let origin = img_rect.min + Vec2::new(v.crop_x as f32, v.crop_y as f32) * view_scale;
+        let rect = Rect::from_min_size(origin, Vec2::new(v.px_width as f32, v.px_height as f32) * view_scale);
+        Some(PieceOnScreen {
+            rect,
+            scale: mat::Scale { origin, px_per_mm: view_scale / mm_per_px },
+            width_mm: v.width_mm,
+            height_mm: v.height_mm,
+        })
     }
 
     /// Cor ativa: (índice, cor, é fundo).

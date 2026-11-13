@@ -1,8 +1,12 @@
-//! Identidade visual do app: paleta de cores, fontes, ícones e estilo
-//! padrão dos controles do egui.
+//! Identidade visual "Bancada": o app como uma bancada de oficina.
 //!
-//! Tudo que for cor ou tamanho "de marca" fica aqui, para mudar o visual
-//! do app inteiro mexendo num lugar só.
+//! - A área de edição é uma base de corte verde, com grade em milímetros.
+//! - Barras e painéis em alumínio claro.
+//! - Amarelo de estilete marca ações principais, ferramenta ativa e cotas.
+//! - Quicksand (pontas arredondadas, como letra extrudada) nos títulos e
+//!   medidas; Lato no texto da interface.
+//!
+//! Tudo que for cor ou tamanho "de marca" fica aqui.
 
 use std::collections::BTreeMap;
 
@@ -12,45 +16,61 @@ use eframe::egui::{
 };
 
 /// Ícones Phosphor (fonte de ícones). Uso: `icons::PAINT_BRUSH`.
-pub use egui_pop_phosphor::regular as icons;
+pub use egui_phosphor::regular as icons;
 
 // ---------------------------------------------------------------------
 // Paleta
 // ---------------------------------------------------------------------
 
-/// Fundo da área de edição (o mais escuro).
-pub const BG: Color32 = Color32::from_rgb(11, 13, 17);
-/// Painéis e barras.
-pub const SURFACE: Color32 = Color32::from_rgb(19, 22, 28);
-/// Cartões dentro dos painéis.
-pub const SURFACE_2: Color32 = Color32::from_rgb(26, 30, 38);
-/// Botões, trilhos de slider, itens em destaque.
-pub const SURFACE_3: Color32 = Color32::from_rgb(38, 43, 54);
-/// Cartão "afundado", dentro de outro cartão.
-pub const INSET: Color32 = Color32::from_rgb(15, 17, 22);
-pub const BORDER: Color32 = Color32::from_rgb(42, 47, 59);
-pub const BORDER_STRONG: Color32 = Color32::from_rgb(70, 78, 96);
+/// Base de corte (área de edição).
+pub const MAT: Color32 = Color32::from_rgb(31, 74, 63);
+/// Faixa das réguas, um tom abaixo da base.
+pub const MAT_DEEP: Color32 = Color32::from_rgb(23, 57, 48);
+/// Linhas finas da grade (milímetros).
+pub const MAT_LINE: Color32 = Color32::from_rgb(42, 92, 79);
+/// Linhas fortes da grade (centímetros).
+pub const MAT_LINE_MAJOR: Color32 = Color32::from_rgb(66, 124, 107);
+/// Números e marcas impressos na base.
+pub const MAT_INK: Color32 = Color32::from_rgb(169, 211, 194);
 
-pub const TEXT: Color32 = Color32::from_rgb(230, 233, 239);
-pub const TEXT_WEAK: Color32 = Color32::from_rgb(136, 144, 160);
-pub const TEXT_DISABLED: Color32 = Color32::from_rgb(84, 91, 105);
+/// Barras e trilho de ferramentas.
+pub const ALUMINIUM: Color32 = Color32::from_rgb(220, 224, 218);
+/// Inspetor (painel de propriedades).
+pub const PLATE: Color32 = Color32::from_rgb(238, 240, 236);
+/// Superfície mais clara (campos, quadros internos).
+pub const PAPER: Color32 = Color32::from_rgb(249, 250, 247);
+/// Trilho de sliders, fundo de controles segmentados.
+pub const TRACK: Color32 = Color32::from_rgb(205, 211, 204);
+/// Linhas finas de divisão.
+pub const RULE: Color32 = Color32::from_rgb(190, 197, 189);
+pub const RULE_STRONG: Color32 = Color32::from_rgb(150, 160, 152);
 
-/// Cor de destaque da marca (violeta).
-pub const ACCENT: Color32 = Color32::from_rgb(124, 92, 255);
-pub const ACCENT_HOVER: Color32 = Color32::from_rgb(146, 120, 255);
-pub const ACCENT_PRESSED: Color32 = Color32::from_rgb(100, 72, 224);
+/// Texto principal.
+pub const INK: Color32 = Color32::from_rgb(23, 32, 28);
+/// Texto secundário.
+pub const GRAPHITE: Color32 = Color32::from_rgb(86, 98, 93);
+pub const DISABLED: Color32 = Color32::from_rgb(150, 158, 153);
 
-pub const DANGER: Color32 = Color32::from_rgb(239, 98, 98);
-pub const WARNING: Color32 = Color32::from_rgb(245, 183, 49);
+/// Amarelo de estilete: ação principal, seleção, cotas.
+pub const CUTTER: Color32 = Color32::from_rgb(245, 196, 0);
+pub const CUTTER_HOVER: Color32 = Color32::from_rgb(255, 210, 38);
+pub const CUTTER_PRESSED: Color32 = Color32::from_rgb(214, 170, 0);
 
-/// Cor de destaque com transparência (fundos suaves).
-pub fn accent_soft(alpha: u8) -> Color32 {
-    Color32::from_rgba_unmultiplied(124, 92, 255, alpha)
-}
+/// Erros e cores marcadas como fundo.
+pub const SIGNAL: Color32 = Color32::from_rgb(196, 65, 47);
 
-/// Família de fonte em negrito.
+// ---------------------------------------------------------------------
+// Fontes e textos
+// ---------------------------------------------------------------------
+
+/// Lato Bold.
 pub fn bold_family() -> FontFamily {
     FontFamily::Name("bold".into())
+}
+
+/// Quicksand Bold: títulos, marca e medidas.
+pub fn display_family() -> FontFamily {
+    FontFamily::Name("display".into())
 }
 
 /// Texto em negrito.
@@ -58,9 +78,24 @@ pub fn bold(text: impl Into<String>) -> RichText {
     RichText::new(text.into()).family(bold_family())
 }
 
-/// Texto secundário (cinza).
+/// Texto de título (Quicksand).
+pub fn display(text: impl Into<String>) -> RichText {
+    RichText::new(text.into()).family(display_family())
+}
+
+/// Texto secundário.
 pub fn muted(text: impl Into<String>) -> RichText {
-    RichText::new(text.into()).color(TEXT_WEAK)
+    RichText::new(text.into()).color(GRAPHITE)
+}
+
+/// Milímetros no formato brasileiro: `50,0 mm`.
+pub fn mm(value: f64) -> String {
+    format!("{value:.1} mm").replace('.', ",")
+}
+
+/// Só o número com vírgula: `50,0`.
+pub fn num(value: f64) -> String {
+    format!("{value:.1}").replace('.', ",")
 }
 
 // ---------------------------------------------------------------------
@@ -70,117 +105,118 @@ pub fn muted(text: impl Into<String>) -> RichText {
 /// Aplica fontes, ícones e estilo. Chamar uma vez na criação do app.
 pub fn apply(ctx: &egui::Context) {
     install_fonts(ctx);
-    // O app tem um tema só (escuro), independente do sistema.
-    ctx.set_theme(ThemePreference::Dark);
+    // Tema único (claro), independente do sistema.
+    ctx.set_theme(ThemePreference::Light);
     ctx.all_styles_mut(|style| {
         style.visuals = visuals();
 
         let s = &mut style.spacing;
-        s.item_spacing = vec2(8.0, 8.0);
-        s.button_padding = vec2(10.0, 6.0);
-        s.interact_size = vec2(32.0, 30.0);
-        s.slider_width = 128.0;
-        s.slider_rail_height = 4.0;
+        s.item_spacing = vec2(8.0, 7.0);
+        s.button_padding = vec2(10.0, 5.0);
+        s.interact_size = vec2(30.0, 28.0);
+        s.slider_width = 132.0;
+        s.slider_rail_height = 3.0;
         s.menu_margin = Margin::same(6);
         s.combo_width = 120.0;
 
         style.interaction.tooltip_delay = 0.35;
 
-        let text_styles: BTreeMap<TextStyle, FontId> = BTreeMap::from([
+        style.text_styles = BTreeMap::from([
             (TextStyle::Small, FontId::new(11.5, FontFamily::Proportional)),
-            (TextStyle::Body, FontId::new(13.5, FontFamily::Proportional)),
-            (TextStyle::Button, FontId::new(13.5, FontFamily::Proportional)),
-            (TextStyle::Heading, FontId::new(15.0, bold_family())),
-            (TextStyle::Monospace, FontId::new(12.5, FontFamily::Monospace)),
+            (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
+            (TextStyle::Button, FontId::new(13.0, FontFamily::Proportional)),
+            (TextStyle::Heading, FontId::new(15.0, display_family())),
+            (TextStyle::Monospace, FontId::new(12.0, FontFamily::Monospace)),
         ]);
-        style.text_styles = text_styles;
     });
 }
 
-/// Fontes: Lato (texto) + Phosphor (ícones). Os ícones entram como reserva
-/// da fonte de texto, então podem ser misturados em qualquer texto.
+/// Fontes: Lato (texto), Quicksand (títulos) e Phosphor (ícones). Os ícones
+/// entram como reserva das outras fontes, então podem ser misturados no texto.
 fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
+    let mut add = |name: &str, bytes: &'static [u8]| {
+        fonts.font_data.insert(name.into(), FontData::from_static(bytes).into());
+    };
+    add("lato", include_bytes!("../../assets/fonts/Lato-Regular.ttf"));
+    add("lato-bold", include_bytes!("../../assets/fonts/Lato-Bold.ttf"));
+    add("quicksand-bold", include_bytes!("../../assets/fonts/Quicksand-Bold.ttf"));
 
-    fonts
-        .font_data
-        .insert("lato".into(), FontData::from_static(include_bytes!("../../assets/fonts/Lato-Regular.ttf")).into());
-    fonts
-        .font_data
-        .insert("lato-bold".into(), FontData::from_static(include_bytes!("../../assets/fonts/Lato-Bold.ttf")).into());
-
-    // Lato vai na frente; as fontes padrão do egui ficam de reserva
-    // (cobrem símbolos que a Lato não tem).
+    // Lato na frente; as fontes padrão do egui ficam de reserva.
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "lato".into());
+    // Phosphor entra logo depois da Lato.
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
 
-    // Entra logo depois da Lato (posição 1) na família de texto.
-    egui_pop_phosphor::add_to_fonts(&mut fonts, egui_pop_phosphor::Variant::Regular);
-
-    // Família negrito: Lato Bold + as mesmas reservas do texto normal.
-    let mut bold_chain = vec!["lato-bold".to_owned()];
-    if let Some(regular) = fonts.families.get(&FontFamily::Proportional) {
-        bold_chain.extend(regular.iter().filter(|name| name.as_str() != "lato").cloned());
+    // Demais famílias: mesma cadeia de reserva, trocando a primeira fonte.
+    let fallbacks: Vec<String> = fonts
+        .families
+        .get(&FontFamily::Proportional)
+        .map(|v| v.iter().filter(|n| n.as_str() != "lato").cloned().collect())
+        .unwrap_or_default();
+    for (family, first) in [(bold_family(), "lato-bold"), (display_family(), "quicksand-bold")] {
+        let mut chain = vec![first.to_owned()];
+        chain.extend(fallbacks.iter().cloned());
+        fonts.families.insert(family, chain);
     }
-    fonts.families.insert(bold_family(), bold_chain);
 
     ctx.set_fonts(fonts);
 }
 
-/// Cores e cantos de todos os controles.
+/// Cores e cantos dos controles padrão do egui.
 fn visuals() -> egui::Visuals {
-    let mut v = egui::Visuals::dark();
-    let radius = CornerRadius::same(8);
+    let mut v = egui::Visuals::light();
+    let radius = CornerRadius::same(6);
 
     v.override_text_color = None;
-    v.panel_fill = SURFACE;
-    v.window_fill = SURFACE_2;
-    v.extreme_bg_color = INSET;
-    v.faint_bg_color = SURFACE_2;
-    v.code_bg_color = SURFACE_3;
-    v.window_corner_radius = CornerRadius::same(12);
-    v.menu_corner_radius = CornerRadius::same(10);
-    v.window_stroke = Stroke::new(1.0, BORDER);
-    let shadow = Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(120) };
+    v.panel_fill = ALUMINIUM;
+    v.window_fill = PAPER;
+    v.extreme_bg_color = PAPER;
+    v.faint_bg_color = PLATE;
+    v.code_bg_color = TRACK;
+    v.window_corner_radius = CornerRadius::same(8);
+    v.menu_corner_radius = CornerRadius::same(8);
+    v.window_stroke = Stroke::new(1.0, RULE_STRONG);
+    let shadow = Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(45) };
     v.window_shadow = shadow;
     v.popup_shadow = shadow;
-    v.hyperlink_color = ACCENT_HOVER;
-    v.warn_fg_color = WARNING;
-    v.error_fg_color = DANGER;
-    v.weak_text_color = Some(TEXT_WEAK);
+    v.hyperlink_color = MAT;
+    v.warn_fg_color = Color32::from_rgb(166, 110, 0);
+    v.error_fg_color = SIGNAL;
+    v.weak_text_color = Some(GRAPHITE);
 
-    // Seleção e parte preenchida dos sliders.
-    v.selection.bg_fill = ACCENT;
-    v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+    // Seleção (e parte preenchida dos sliders): amarelo de estilete.
+    v.selection.bg_fill = CUTTER;
+    v.selection.stroke = Stroke::new(1.0, INK);
 
     let w = &mut v.widgets;
 
-    // Elementos sem interação (rótulos, separadores).
-    w.noninteractive.bg_fill = SURFACE;
-    w.noninteractive.weak_bg_fill = SURFACE;
-    w.noninteractive.bg_stroke = Stroke::new(1.0, BORDER);
-    w.noninteractive.fg_stroke = Stroke::new(1.0, TEXT);
+    // Elementos sem interação: rótulos, separadores.
+    w.noninteractive.bg_fill = ALUMINIUM;
+    w.noninteractive.weak_bg_fill = ALUMINIUM;
+    w.noninteractive.bg_stroke = Stroke::new(1.0, RULE);
+    w.noninteractive.fg_stroke = Stroke::new(1.0, INK);
     w.noninteractive.corner_radius = radius;
 
     // Em repouso.
-    w.inactive.bg_fill = SURFACE_3;
-    w.inactive.weak_bg_fill = SURFACE_3;
-    w.inactive.bg_stroke = Stroke::new(1.0, BORDER);
-    w.inactive.fg_stroke = Stroke::new(1.0, TEXT);
+    w.inactive.bg_fill = TRACK;
+    w.inactive.weak_bg_fill = PAPER;
+    w.inactive.bg_stroke = Stroke::new(1.0, RULE);
+    w.inactive.fg_stroke = Stroke::new(1.0, INK);
     w.inactive.corner_radius = radius;
 
     // Mouse em cima.
-    w.hovered.bg_fill = Color32::from_rgb(50, 56, 70);
-    w.hovered.weak_bg_fill = Color32::from_rgb(50, 56, 70);
-    w.hovered.bg_stroke = Stroke::new(1.0, BORDER_STRONG);
-    w.hovered.fg_stroke = Stroke::new(1.5, Color32::WHITE);
+    w.hovered.bg_fill = Color32::from_rgb(190, 198, 189);
+    w.hovered.weak_bg_fill = Color32::WHITE;
+    w.hovered.bg_stroke = Stroke::new(1.0, RULE_STRONG);
+    w.hovered.fg_stroke = Stroke::new(1.5, INK);
     w.hovered.corner_radius = radius;
     w.hovered.expansion = 0.0;
 
     // Pressionado.
-    w.active.bg_fill = ACCENT_PRESSED;
-    w.active.weak_bg_fill = ACCENT_PRESSED;
-    w.active.bg_stroke = Stroke::new(1.0, ACCENT);
-    w.active.fg_stroke = Stroke::new(1.5, Color32::WHITE);
+    w.active.bg_fill = CUTTER_PRESSED;
+    w.active.weak_bg_fill = CUTTER;
+    w.active.bg_stroke = Stroke::new(1.0, INK);
+    w.active.fg_stroke = Stroke::new(1.5, INK);
     w.active.corner_radius = radius;
     w.active.expansion = 0.0;
 

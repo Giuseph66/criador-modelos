@@ -4,10 +4,12 @@
 //! Organização:
 //! - `app.rs` (este): estado, ações (abrir, desfazer, exportar) e painéis.
 //! - `app/canvas.rs`: a tela de edição com as ferramentas.
-//! - `app/widgets.rs`: componentes visuais (botões com ícone, cartões...).
+//! - `app/mat.rs`: a base de corte (grade em mm, réguas, cotas).
+//! - `app/widgets.rs`: componentes visuais (botões, abas, carretéis...).
 //! - `app/theme.rs`: cores, fontes, ícones e estilo.
 
 mod canvas;
+mod mat;
 mod theme;
 mod widgets;
 
@@ -27,11 +29,8 @@ use criador_modelos::vectorize::{CurveMode, VectorParams, VectorResult};
 
 use crate::worker::{DetectJob, Detection, Job, JobResult, RenderJob, RenderSettings, Worker};
 use canvas::{CanvasState, Tool};
-use theme::{ACCENT_HOVER, BG, SURFACE, WARNING, bold, icons, muted};
-use widgets::{
-    add_tile, brand, ghost, hero_icon, inset, primary, secondary, section, segmented, show_fit, swatch,
-    tool as tool_button,
-};
+use theme::{ALUMINIUM, CUTTER, GRAPHITE, INK, MAT, MAT_INK, PAPER, PLATE, SIGNAL, bold, display, icons, muted, num};
+use widgets::{add_spool, field, ghost, inset, primary, secondary, section, segmented, spool, tab, wordmark};
 
 /// Maior lado da textura usada para mostrar a imagem original.
 const ORIGINAL_PREVIEW_MAX: u32 = 2048;
@@ -519,45 +518,46 @@ impl CriadorApp {
             return;
         };
 
-        ui.label(muted("Escolha uma cor para pintar com ela ou editá-la.").size(12.0));
+        ui.label(muted("Cada carretel é uma cor da peça. Clique para pintar com ela ou editá-la.").size(12.0));
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+            ui.spacing_mut().item_spacing = egui::vec2(2.0, 2.0);
             for (i, e) in doc.entries.iter().enumerate() {
-                let tip = format!(
-                    "{} · {:.1}% da imagem{}",
-                    hex(e.color),
-                    e.coverage * 100.0,
-                    if e.background { " · fundo (não entra no modelo)" } else { "" }
-                );
-                if swatch(ui, e.color, 30.0, self.selected == Some(i), e.background).on_hover_text(tip).clicked() {
+                let mut tip = format!("{}\n{}% da imagem", hex(e.color).to_uppercase(), num(e.coverage as f64 * 100.0));
+                if e.background {
+                    tip.push_str("\nFundo: não entra no modelo");
+                }
+                if spool(ui, e.color, 30.0, self.selected == Some(i), e.background).on_hover_text(tip).clicked() {
                     self.selected = Some(i);
                 }
             }
-            if add_tile(ui, 30.0).on_hover_text("Adicionar uma cor nova à paleta").clicked() {
+            if add_spool(ui, 30.0).on_hover_text("Adicionar uma cor nova").clicked() {
                 self.add_color();
             }
         });
 
         let Some(i) = self.selected.filter(|&i| i < doc.entries.len()) else { return };
         let entry = doc.entries[i].clone();
+        ui.add_space(4.0);
 
         inset(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(bold("Cor selecionada"));
-                ui.label(muted(format!("{:.1}% da imagem", entry.coverage * 100.0)).size(12.0));
-            });
-
             // Editamos uma cópia; se mudou, registra no histórico e aplica.
             let mut color = entry.color;
             ui.horizontal(|ui| {
                 ui.color_edit_button_srgb(&mut color).on_hover_text("Trocar a cor");
-                ui.label(egui::RichText::new(hex(color)).monospace());
-                if entry.color != entry.original
-                    && ghost(ui, icons::ARROW_COUNTER_CLOCKWISE, "Original")
-                        .on_hover_text("Voltar para a cor detectada")
-                        .clicked()
-                {
-                    color = entry.original;
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    ui.label(bold(hex(color).to_uppercase()).color(INK));
+                    ui.label(muted(format!("{}% da imagem", num(entry.coverage as f64 * 100.0))).size(11.5));
+                });
+                if entry.color != entry.original {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ghost(ui, icons::ARROW_COUNTER_CLOCKWISE, "")
+                            .on_hover_text("Voltar para a cor detectada")
+                            .clicked()
+                        {
+                            color = entry.original;
+                        }
+                    });
                 }
             });
             if color != entry.color {
@@ -572,7 +572,7 @@ impl CriadorApp {
             segmented(
                 ui,
                 &mut background,
-                &[(false, icons::CUBE, "No modelo"), (true, icons::EYE_SLASH, "Fundo")],
+                &[(false, icons::CUBE, "Na peça"), (true, icons::EYE_SLASH, "Fundo")],
                 true,
             );
             if background != entry.background {
@@ -617,8 +617,12 @@ impl CriadorApp {
                     .show_ui(ui, |ui| {
                         for (j, other) in doc.entries.iter().enumerate().filter(|&(j, _)| j != i) {
                             ui.horizontal(|ui| {
-                                swatch(ui, other.color, 16.0, false, other.background);
-                                let label = format!("{}{}", hex(other.color), if other.background { " (fundo)" } else { "" });
+                                spool(ui, other.color, 14.0, false, other.background);
+                                let label = format!(
+                                    "{}{}",
+                                    hex(other.color).to_uppercase(),
+                                    if other.background { " (fundo)" } else { "" }
+                                );
                                 if ui.selectable_label(false, label).clicked() {
                                     merge_into = Some(j);
                                 }
@@ -641,7 +645,7 @@ impl CriadorApp {
         });
     }
 
-    /// Lista das camadas que vão para o SVG/STL.
+    /// Lista das camadas que vão para o SVG/STL, com a altura de cada uma.
     fn layers_ui(&mut self, ui: &mut egui::Ui) {
         let groups = match &self.doc {
             Some(doc) => colors::layer_groups(&doc.entries),
@@ -651,24 +655,21 @@ impl CriadorApp {
 
         let select = section(ui, icons::STACK, "Camadas", |ui| {
             if groups.is_empty() {
-                ui.colored_label(WARNING, "Nenhuma camada: todas as cores estão como fundo.");
+                ui.colored_label(SIGNAL, "Nenhuma camada: todas as cores estão como fundo.");
                 return None;
             }
-            ui.label(muted("De baixo para cima. A altura de cada uma está à direita.").size(12.0));
+            ui.label(muted("De baixo para cima, com a altura de cada uma no STL.").size(12.0));
             let mut select = None;
             for (n, g) in groups.iter().enumerate() {
                 let (z0, z1) = params.z_range(n);
                 ui.horizontal(|ui| {
-                    if swatch(ui, g.color, 18.0, false, false).on_hover_text("Selecionar esta cor").clicked() {
+                    if spool(ui, g.color, 18.0, false, false).on_hover_text("Selecionar esta cor").clicked() {
                         select = g.members.first().copied();
                     }
-                    ui.label(bold(format!("{}", n + 1)));
-                    ui.label(format!("{:.1}%", g.coverage * 100.0));
-                    if n == 0 {
-                        ui.label(muted("base").size(12.0));
-                    }
+                    ui.label(if n == 0 { bold("Base") } else { bold(format!("Camada {}", n + 1)) });
+                    ui.label(muted(format!("{}%", num(g.coverage as f64 * 100.0))).size(12.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(muted(format!("{z0:.1}–{z1:.1} mm")).size(12.0));
+                        ui.label(muted(format!("{} a {} mm", num(z0), num(z1))).size(12.0));
                     });
                 });
             }
@@ -687,44 +688,46 @@ impl CriadorApp {
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            brand(ui);
-            ui.add_space(10.0);
+            ui.spacing_mut().item_spacing.x = 4.0;
+            wordmark(ui);
+            ui.add_space(20.0);
 
-            if secondary(ui, icons::FOLDER_OPEN, "Abrir")
+            if ghost(ui, icons::FOLDER_OPEN, "Abrir")
                 .on_hover_text("Abrir imagem (Ctrl+O). Também dá para arrastar o arquivo para a janela.")
                 .clicked()
             {
                 self.open_dialog(ui.ctx());
             }
-
             let (can_undo, can_redo) = (self.history.can_undo(), self.history.can_redo());
             ui.add_enabled_ui(can_undo, |ui| {
-                if tool_button(ui, icons::ARROW_COUNTER_CLOCKWISE, false).on_hover_text("Desfazer (Ctrl+Z)").clicked() {
+                if ghost(ui, icons::ARROW_COUNTER_CLOCKWISE, "").on_hover_text("Desfazer (Ctrl+Z)").clicked() {
                     self.undo();
                 }
             });
             ui.add_enabled_ui(can_redo, |ui| {
-                if tool_button(ui, icons::ARROW_CLOCKWISE, false).on_hover_text("Refazer (Ctrl+Y)").clicked() {
+                if ghost(ui, icons::ARROW_CLOCKWISE, "").on_hover_text("Refazer (Ctrl+Y)").clicked() {
                     self.redo();
                 }
             });
-            ui.add_space(10.0);
 
-            segmented(
-                ui,
-                &mut self.view,
-                &[
+            if self.image.is_some() {
+                ui.add_space(20.0);
+                let tabs = [
                     (View::Edit, icons::PENCIL_SIMPLE, "Editar"),
                     (View::Original, icons::IMAGE, "Original"),
                     (View::Vector, icons::BEZIER_CURVE, "Vetor"),
                     (View::Compare, icons::COLUMNS, "Comparar"),
-                ],
-                false,
-            );
+                ];
+                for (view, icon, label) in tabs {
+                    if tab(ui, icon, label, self.view == view).clicked() {
+                        self.view = view;
+                    }
+                }
+            }
 
             // Grupo da direita (a ordem é de fora para dentro).
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
                 ui.add_enabled_ui(self.doc.is_some(), |ui| {
                     if primary(ui, icons::CUBE, "Exportar STL")
                         .on_hover_text("Modelo 3D para impressão (Ctrl+E)")
@@ -738,7 +741,7 @@ impl CriadorApp {
                     {
                         self.save_svg();
                     }
-                    ui.menu_button(egui::RichText::new(icons::DOTS_THREE).size(20.0), |ui| {
+                    ui.menu_button(egui::RichText::new(icons::DOTS_THREE).size(18.0).color(GRAPHITE), |ui| {
                         if ui.button(format!("{}  Um SVG por cor", icons::FILES)).clicked() {
                             self.save_layer_svgs();
                             ui.close();
@@ -753,8 +756,9 @@ impl CriadorApp {
         });
     }
 
-    fn side_panel(&mut self, ui: &mut egui::Ui) {
-        section(ui, icons::MAGIC_WAND, "Detectar", |ui| {
+    /// Inspetor: propriedades à direita, seções separadas por linhas finas.
+    fn inspector(&mut self, ui: &mut egui::Ui) {
+        section(ui, icons::MAGIC_WAND, "Detecção", |ui| {
             segmented(
                 ui,
                 &mut self.mode,
@@ -772,11 +776,11 @@ impl CriadorApp {
             ui.add(egui::Slider::new(&mut self.max_side, 200..=3000).text("resolução").suffix(" px").step_by(100.0))
                 .on_hover_text("Maior lado usado para editar e vetorizar. Menos = mais simples e rápido");
             if self.history.can_undo() {
-                ui.label(muted("Mudar estas opções detecta de novo e substitui suas edições (Ctrl+Z desfaz).").size(12.0));
+                ui.label(muted("Mudar a detecção refaz as cores e substitui suas edições. Ctrl+Z desfaz.").size(11.5));
             }
         });
 
-        section(ui, icons::PALETTE, "Paleta", |ui| self.palette_ui(ui));
+        section(ui, icons::PALETTE, "Cores", |ui| self.palette_ui(ui));
 
         section(ui, icons::BEZIER_CURVE, "Contorno", |ui| {
             ui.add(egui::Slider::new(&mut self.render.smooth_sigma, 0.0..=5.0).text("suavizar"))
@@ -810,8 +814,26 @@ impl CriadorApp {
 
         self.layers_ui(ui);
 
-        section(ui, icons::RULER, "Tamanho e 3D", |ui| {
-            egui::Grid::new("dimensoes").num_columns(2).spacing([14.0, 8.0]).show(ui, |ui| {
+        section(ui, icons::RULER, "Medidas", |ui| {
+            if let Some(out) = &self.output {
+                let height = self.mesh_params().total_height(out.vector.geometry.len());
+                ui.horizontal(|ui| {
+                    ui.label(
+                        display(format!(
+                            "{} × {} × {}",
+                            num(out.vector.width_mm),
+                            num(out.vector.height_mm),
+                            num(height)
+                        ))
+                        .size(22.0)
+                        .color(INK),
+                    );
+                    ui.label(muted("mm"));
+                });
+                ui.label(muted("largura × altura × espessura da peça").size(11.5));
+                ui.add_space(4.0);
+            }
+            egui::Grid::new("medidas").num_columns(2).spacing([16.0, 7.0]).show(ui, |ui| {
                 ui.label("Largura");
                 ui.add(egui::DragValue::new(&mut self.render.vector.width_mm).range(1.0..=1000.0).speed(0.5).suffix(" mm"))
                     .on_hover_text("Largura do desenho (as margens vazias são cortadas)");
@@ -825,20 +847,13 @@ impl CriadorApp {
                     .on_hover_text("Quanto cada camada de cima sobe em relação à de baixo");
                 ui.end_row();
             });
-            if let Some(out) = &self.output {
-                let height = self.mesh_params().total_height(out.vector.geometry.len());
-                ui.label(muted(format!(
-                    "Peça final: {:.1} × {:.1} × {:.1} mm",
-                    out.vector.width_mm, out.vector.height_mm, height
-                )));
-            }
-            ui.checkbox(&mut self.stl_per_color, "STL separado por cor").on_hover_text(
-                "Um arquivo por camada — importe todos juntos no slicer e escolha um filamento para cada",
+            ui.checkbox(&mut self.stl_per_color, "Um STL por cor").on_hover_text(
+                "Um arquivo por camada. Importe todos juntos no slicer e escolha um filamento para cada.",
             );
         });
 
         if ghost(ui, icons::ARROW_COUNTER_CLOCKWISE, "Restaurar padrões")
-            .on_hover_text("Volta as opções de contorno e 3D; suas edições continuam")
+            .on_hover_text("Volta as opções de contorno e medidas; suas edições continuam")
             .clicked()
         {
             self.render = RenderSettings {
@@ -847,12 +862,12 @@ impl CriadorApp {
             };
             self.mesh = MeshParams::default();
         }
-        ui.add_space(8.0);
+        ui.add_space(10.0);
     }
 
     fn bw_controls(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.label(muted("Predefinição"));
+            ui.label(muted("Partir de"));
             if secondary(ui, "", "Logo").clicked() {
                 self.apply_preset(Preset::Logo);
             }
@@ -867,7 +882,7 @@ impl CriadorApp {
             ui,
             &mut self.bw.mode,
             &[
-                (ThresholdMode::Otsu, "", "Auto"),
+                (ThresholdMode::Otsu, "", "Automático"),
                 (ThresholdMode::Fixed, "", "Manual"),
                 (ThresholdMode::Adaptive, "", "Adaptativo"),
             ],
@@ -888,24 +903,30 @@ impl CriadorApp {
         }
         ui.add(egui::Slider::new(&mut self.bw.blur_sigma, 0.0..=5.0).text("desfocar"))
             .on_hover_text("Desfoque antes do corte: menos ruído");
-        ui.checkbox(&mut self.bw.invert, "Inverter claro/escuro");
+        ui.checkbox(&mut self.bw.invert, "Inverter claro e escuro");
     }
 
-    /// Tela inicial, antes de abrir uma imagem.
+    /// Tela inicial: a bancada vazia, esperando uma imagem.
     fn welcome(&mut self, ui: &mut egui::Ui) {
+        let area = ui.available_rect_before_wrap();
+        mat::paint_mat(ui.painter(), area, None);
         ui.vertical_centered(|ui| {
-            ui.add_space((ui.available_height() * 0.24).max(24.0));
-            hero_icon(ui, icons::IMAGE_SQUARE);
-            ui.add_space(16.0);
-            ui.label(bold("Transforme qualquer imagem em SVG ou STL").size(28.0));
+            ui.add_space((area.height() * 0.32).max(24.0));
+            ui.label(egui::RichText::new(icons::IMAGE_SQUARE).size(44.0).color(CUTTER));
+            ui.add_space(6.0);
+            ui.label(display("Solte uma imagem na bancada").size(30.0).color(PAPER));
             ui.add_space(2.0);
-            ui.label(muted("Detecte as cores, pinte à mão e exporte direto para o seu slicer.").size(15.5));
+            ui.label(
+                egui::RichText::new("Detecte as cores, ajuste à mão e exporte SVG ou STL no tamanho certo.")
+                    .size(14.5)
+                    .color(MAT_INK),
+            );
             ui.add_space(20.0);
             if primary(ui, icons::FOLDER_OPEN, "Abrir imagem").clicked() {
                 self.open_dialog(ui.ctx());
             }
             ui.add_space(10.0);
-            ui.label(muted("ou arraste um arquivo PNG, JPG ou WebP para esta janela").size(12.5));
+            ui.label(egui::RichText::new("PNG, JPG, WebP, BMP ou GIF").size(12.0).color(MAT_INK));
         });
     }
 
@@ -916,22 +937,22 @@ impl CriadorApp {
         }
         match self.view {
             View::Edit => {
-                self.editor_toolbar(ui);
-                ui.add_space(4.0);
+                self.options_bar(ui);
+                ui.add_space(6.0);
                 self.editor_canvas(ui);
             }
-            View::Original => show_fit(ui, self.image.as_ref().map(|i| &i.texture)),
-            View::Vector => show_fit(ui, self.output.as_ref().and_then(|o| o.texture.as_ref())),
+            View::Original => mat::board(ui, self.image.as_ref().map(|i| &i.texture)),
+            View::Vector => mat::board(ui, self.output.as_ref().and_then(|o| o.texture.as_ref())),
             View::Compare => {
-                let textures = [
+                let boards = [
                     ("Original", self.image.as_ref().map(|i| &i.texture)),
-                    ("Editada", self.canvas.texture.as_ref()),
-                    ("Vetor (SVG)", self.output.as_ref().and_then(|o| o.texture.as_ref())),
+                    ("Cores editadas", self.canvas.texture.as_ref()),
+                    ("Vetor", self.output.as_ref().and_then(|o| o.texture.as_ref())),
                 ];
                 ui.columns(3, |cols| {
-                    for (col, (title, tex)) in cols.iter_mut().zip(textures) {
-                        col.vertical_centered(|ui| ui.label(muted(title)));
-                        show_fit(col, tex);
+                    for (col, (title, tex)) in cols.iter_mut().zip(boards) {
+                        col.label(display(title).size(14.0).color(INK));
+                        mat::board(col, tex);
                     }
                 });
             }
@@ -940,27 +961,26 @@ impl CriadorApp {
 
     fn status_bar(&self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 10.0;
+            ui.spacing_mut().item_spacing.x = 5.0;
             if self.detecting {
                 ui.add(egui::Spinner::new().size(12.0));
-                ui.label(muted("Detectando cores…").size(12.0));
+                ui.label(muted("Detectando cores").size(12.0));
+                ui.add_space(14.0);
             } else if self.pending_render.is_some() || self.canvas.is_stroking() {
                 ui.add(egui::Spinner::new().size(12.0));
-                ui.label(muted("Atualizando vetor…").size(12.0));
+                ui.label(muted("Atualizando vetor").size(12.0));
+                ui.add_space(14.0);
             }
             if let Some(out) = &self.output {
-                ui.label(
-                    muted(format!(
-                        "{} camada(s) · {} formas · {:.1} × {:.1} mm · SVG {:.0} KB · {} ms",
-                        out.vector.layers.len(),
-                        out.vector.path_count,
-                        out.vector.width_mm,
-                        out.vector.height_mm,
-                        out.vector.svg.len() as f64 / 1024.0,
-                        out.elapsed_ms
-                    ))
-                    .size(12.0),
-                );
+                let v = &out.vector;
+                let height = self.mesh_params().total_height(v.geometry.len());
+                field(ui, "Peça", &format!("{} × {} × {} mm", num(v.width_mm), num(v.height_mm), num(height)));
+                ui.add_space(14.0);
+                field(ui, "Camadas", &v.layers.len().to_string());
+                ui.add_space(14.0);
+                field(ui, "Formas", &v.path_count.to_string());
+                ui.add_space(14.0);
+                field(ui, "SVG", &format!("{} KB", v.svg.len().div_ceil(1024)));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(muted(&self.status).size(12.0));
@@ -1027,28 +1047,25 @@ impl CriadorApp {
         if ctx.input(|i| i.raw.hovered_files.is_empty()) {
             return;
         }
-        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop-overlay")));
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("drop-overlay")));
         let rect = ctx.content_rect();
-        painter.rect_filled(rect, 0.0, egui::Color32::from_rgba_unmultiplied(11, 13, 17, 222));
-        painter.rect_stroke(
-            rect.shrink(16.0),
-            egui::CornerRadius::same(18),
-            egui::Stroke::new(2.0, ACCENT_HOVER),
-            egui::StrokeKind::Inside,
+        painter.rect_filled(rect, 0.0, MAT.gamma_multiply(0.94));
+        let frame = rect.shrink(20.0);
+        let outline = vec![frame.left_top(), frame.right_top(), frame.right_bottom(), frame.left_bottom(), frame.left_top()];
+        painter.extend(egui::Shape::dashed_line(&outline, egui::Stroke::new(2.0, CUTTER), 10.0, 7.0));
+        painter.text(
+            rect.center() - egui::vec2(0.0, 28.0),
+            egui::Align2::CENTER_CENTER,
+            icons::DOWNLOAD_SIMPLE,
+            egui::FontId::proportional(46.0),
+            CUTTER,
         );
         painter.text(
-            rect.center() - egui::vec2(0.0, 26.0),
+            rect.center() + egui::vec2(0.0, 24.0),
             egui::Align2::CENTER_CENTER,
-            icons::UPLOAD_SIMPLE,
-            egui::FontId::proportional(48.0),
-            ACCENT_HOVER,
-        );
-        painter.text(
-            rect.center() + egui::vec2(0.0, 26.0),
-            egui::Align2::CENTER_CENTER,
-            "Solte a imagem para abrir",
-            egui::FontId::new(22.0, theme::bold_family()),
-            egui::Color32::WHITE,
+            "Solte para abrir na bancada",
+            egui::FontId::new(26.0, theme::display_family()),
+            PAPER,
         );
     }
 
@@ -1099,17 +1116,26 @@ impl eframe::App for CriadorApp {
             self.end_stroke();
         }
 
-        let bar = egui::Frame::new().fill(SURFACE).inner_margin(egui::Margin::symmetric(14, 10));
-        let footer = egui::Frame::new().fill(SURFACE).inner_margin(egui::Margin::symmetric(14, 6));
-        let side = egui::Frame::new().fill(SURFACE).inner_margin(egui::Margin::same(12));
-        let main = egui::Frame::new().fill(BG).inner_margin(egui::Margin::same(12));
+        let frame = |fill, x, y| egui::Frame::new().fill(fill).inner_margin(egui::Margin::symmetric(x, y));
 
-        egui::Panel::top("barra").frame(bar).show(ui, |ui| self.top_bar(ui));
-        egui::Panel::bottom("status").frame(footer).show(ui, |ui| self.status_bar(ui));
-        egui::Panel::left("controles").frame(side).resizable(true).default_size(340.0).min_size(300.0).show(ui, |ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| self.side_panel(ui));
-        });
-        egui::CentralPanel::default().frame(main).show(ui, |ui| self.central(ui));
+        egui::Panel::top("barra").frame(frame(ALUMINIUM, 14, 0)).show(ui, |ui| self.top_bar(ui));
+        egui::Panel::bottom("status").frame(frame(ALUMINIUM, 14, 5)).show(ui, |ui| self.status_bar(ui));
+        if self.image.is_some() {
+            egui::Panel::left("ferramentas")
+                .frame(frame(ALUMINIUM, 8, 10))
+                .resizable(false)
+                .exact_size(56.0)
+                .show(ui, |ui| self.tool_rail(ui));
+            egui::Panel::right("inspetor")
+                .frame(frame(PLATE, 16, 6))
+                .resizable(true)
+                .default_size(330.0)
+                .min_size(300.0)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| self.inspector(ui));
+                });
+        }
+        egui::CentralPanel::default().frame(frame(ALUMINIUM, 10, 10)).show(ui, |ui| self.central(ui));
 
         self.drop_overlay(&ctx);
         self.sync_jobs();

@@ -103,6 +103,9 @@ pub struct VectorResult {
     /// Tamanho em pixels da área recortada (coordenadas da geometria).
     pub px_width: u32,
     pub px_height: u32,
+    /// Canto da área recortada dentro da imagem original (pixels).
+    pub crop_x: u32,
+    pub crop_y: u32,
 }
 
 /// Converte uma máscara (0 = preto/forma) em SVG preto.
@@ -167,6 +170,8 @@ pub fn vectorize_layers(
         geometry,
         px_width: width,
         px_height: height,
+        crop_x: x0,
+        crop_y: y0,
     }
 }
 

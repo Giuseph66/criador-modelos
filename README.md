@@ -88,16 +88,25 @@ src/
   main.rs         ponto de entrada, abre a janela
   app.rs          interface: estado, ações, painéis
   app/canvas.rs   tela de edição: zoom, mover, ferramentas
-  app/widgets.rs  componentes visuais: botões com ícone, segmentado, cartões, amostras
-  app/theme.rs    paleta, fontes (Lato), ícones (Phosphor), estilo dos controles
+  app/mat.rs      base de corte: grade em mm, réguas, cotas
+  app/widgets.rs  componentes visuais: botões, abas, segmentado, carretéis
+  app/theme.rs    paleta "Bancada", fontes (Lato, Quicksand), ícones (Phosphor)
   worker.rs       detecção e vetorização numa thread separada
 examples/
   converter.rs    versão linha de comando
 ```
 
-### Visual
+### Visual: "Bancada"
 
-Tema escuro próprio em `src/app/theme.rs` (paleta, tipografia, cantos, espaçamento). Ícones em vez de emojis, botões desenhados à mão em `src/app/widgets.rs`. Para mudar a cor da marca, altere `ACCENT` no `theme.rs`.
+O app é desenhado como uma bancada de oficina:
+
+- **Base de corte** verde na área de edição, com grade e réguas em **milímetros reais** (ligadas à largura de exportação) e cotas amarelas de largura e altura da peça. As cores marcadas como fundo ficam transparentes e deixam a base aparecer.
+- **Alumínio claro** nas barras, **inspetor** à direita com seções separadas por linhas finas.
+- **Amarelo de estilete** só para o que importa: ação principal, ferramenta ativa e medidas.
+- Cores da peça mostradas como **carretéis de filamento**.
+- **Quicksand** (pontas arredondadas, como letra extrudada) em títulos e medidas; **Lato** no texto.
+
+Paleta e fontes em `src/app/theme.rs`; base de corte em `src/app/mat.rs`.
 
 ### Bibliotecas
 
@@ -134,5 +143,5 @@ Conceitos que aparecem no código, em ordem de dificuldade:
 ## Créditos
 
 - Ícones: [Phosphor Icons](https://phosphoricons.com) (MIT), via a crate `egui-pop-phosphor`.
-- Fonte: [Lato](https://www.latofonts.com) (SIL Open Font License) — licença em `assets/fonts/LATO-LICENSE.txt`.
+- Fontes: [Lato](https://www.latofonts.com) e [Quicksand](https://fonts.google.com/specimen/Quicksand) (SIL Open Font License) — licenças em `assets/fonts/`.
 - Interface: [egui](https://github.com/emilk/egui). Vetorização: [visioncortex](https://github.com/visioncortex/visioncortex).
